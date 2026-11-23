@@ -7,6 +7,10 @@ export const health = {
       server.route({
         method: 'GET',
         path: '/health',
+        options: {
+          // The platform checks this without signing in
+          auth: false
+        },
         ...healthController
       })
     }
