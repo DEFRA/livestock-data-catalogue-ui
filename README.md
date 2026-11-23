@@ -190,7 +190,9 @@ the [.github/example.dependabot.yml](.github/example.dependabot.yml) to `.github
 
 ### SonarCloud
 
-Instructions for setting up SonarCloud can be found in [sonar-project.properties](./sonar-project.properties).
+SonarCloud analyses pull requests from this repository and every push to
+`main`. See the
+[project dashboard](https://sonarcloud.io/summary/new_code?id=DEFRA_livestock-data-catalogue-ui).
 
 ## Licence
 
