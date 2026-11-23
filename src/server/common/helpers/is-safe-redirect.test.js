@@ -18,6 +18,22 @@ describe('isSafeRedirect', () => {
     expect(isSafeRedirect('//evil.example.com')).toBe(false)
   })
 
+  test('returns false for a backslash URL that browsers treat as another site', () => {
+    expect(isSafeRedirect('/\\evil.example.com')).toBe(false)
+  })
+
+  test('returns false for a URL that hides another site behind a tab', () => {
+    expect(isSafeRedirect('/\t/evil.example.com')).toBe(false)
+  })
+
+  test('returns false for a path containing a line break', () => {
+    expect(isSafeRedirect('/search\r\nSet-Cookie: x=y')).toBe(false)
+  })
+
+  test('returns false for a path a browser cannot read', () => {
+    expect(isSafeRedirect('/\\[')).toBe(false)
+  })
+
   test('returns false for null', () => {
     expect(isSafeRedirect(null)).toBe(false)
   })

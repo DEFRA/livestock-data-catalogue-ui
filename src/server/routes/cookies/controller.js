@@ -7,6 +7,8 @@ export const cookiePolicyController = {
   method: 'GET',
   path: '/cookies',
   options: {
+    // Open to everyone, but a signed-in user still sees the Sign out link
+    auth: { mode: 'try' },
     validate: {
       query: Joi.object({
         updated: Joi.boolean().default(false)
@@ -16,6 +18,8 @@ export const cookiePolicyController = {
   handler: function (request, h) {
     return h.view('cookies/policy', {
       pageTitle: 'Cookies',
+      sessionCookieName: config.get('auth.sessionCookieName'),
+      sessionStoreCookieName: config.get('session.cache.name'),
       ...cookiesModel(
         request.query.updated,
         request.state[config.get('cookieConsent.name')]
@@ -28,6 +32,7 @@ export const updateCookiePreferencesController = {
   method: 'POST',
   path: '/cookies',
   options: {
+    auth: false,
     validate: {
       payload: Joi.object().keys({
         analytics: Joi.boolean().required(),

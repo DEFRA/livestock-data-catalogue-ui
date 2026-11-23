@@ -82,6 +82,23 @@ describe('Cookies route', () => {
     expect(response.payload).toContain('_ga')
   })
 
+  test('GET /cookies lists the sign-in cookies as essential cookies', async () => {
+    const response = await server.inject({ method: 'GET', url: '/cookies' })
+    const $ = cheerio.load(response.payload)
+    const essentialCookieNames = $('.govuk-table')
+      .first()
+      .find('tbody tr td:first-child')
+      .map((_index, cell) => $(cell).text().trim())
+      .get()
+
+    expect(essentialCookieNames).toEqual([
+      config.get('cookieConsent.name'),
+      config.get('auth.sessionCookieName'),
+      config.get('session.cache.name'),
+      'hapi-auth-oidc'
+    ])
+  })
+
   test('POST /cookies returns 200 if async', async () => {
     const getResponse = await server.inject({ method: 'GET', url: '/cookies' })
     const $ = cheerio.load(getResponse.payload)

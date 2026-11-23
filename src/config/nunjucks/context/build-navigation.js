@@ -1,5 +1,7 @@
+import { authPaths } from '#/server/common/constants/auth-paths.js'
+
 export function buildNavigation(request) {
-  return [
+  const navigation = [
     {
       text: 'Home',
       href: '/',
@@ -11,4 +13,13 @@ export function buildNavigation(request) {
       current: request?.path === '/about'
     }
   ]
+
+  if (request?.auth?.isAuthenticated) {
+    navigation.push({
+      text: 'Sign out',
+      href: authPaths.signOut
+    })
+  }
+
+  return navigation
 }

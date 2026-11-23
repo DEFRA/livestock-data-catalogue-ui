@@ -69,6 +69,21 @@
             <td class="govuk-table__cell">Saves your cookie consent settings</td>
             <td class="govuk-table__cell">1 year</td>
           </tr>
+          <tr class="govuk-table__row">
+            <td class="govuk-table__cell">{{ sessionCookieName }}</td>
+            <td class="govuk-table__cell">Keeps you signed in to the service</td>
+            <td class="govuk-table__cell">4 hours after you last use the service</td>
+          </tr>
+          <tr class="govuk-table__row">
+            <td class="govuk-table__cell">{{ sessionStoreCookieName }}</td>
+            <td class="govuk-table__cell">Remembers the page you asked for while you sign in</td>
+            <td class="govuk-table__cell">4 hours</td>
+          </tr>
+          <tr class="govuk-table__row">
+            <td class="govuk-table__cell">hapi-auth-oidc</td>
+            <td class="govuk-table__cell">Checks that your sign-in request came from this service</td>
+            <td class="govuk-table__cell">When you've signed in, or when you close your browser</td>
+          </tr>
         </tbody>
       </table>
 

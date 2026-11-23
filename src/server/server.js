@@ -16,6 +16,8 @@ import { contentSecurityPolicy } from './plugins/content-security-policy.js'
 import { metrics } from '@defra/cdp-metrics'
 import { cookieConsent } from '#/server/plugins/cookie-consent.js'
 import { csrf } from '#/server/plugins/csrf.js'
+import { authOidc } from '#/server/plugins/auth-oidc.js'
+import { authSession } from '#/server/plugins/auth-session.js'
 
 export async function createServer() {
   const server = hapi.server({
@@ -62,6 +64,8 @@ export async function createServer() {
     pulse,
     contentSecurityPolicy,
     sessionCache,
+    authOidc,
+    authSession, // Sets sign-in as the default for every route, so register before the router
     nunjucksConfig,
     Scooter,
     csrf,
