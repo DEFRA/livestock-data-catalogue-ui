@@ -1,3 +1,5 @@
+import { isLocalSignInEnabled, localDeveloperClaims } from './local-sign-in.js'
+
 /**
  * @typedef {object} UserSession
  * @property {string} id - the user's Entra ID object ID (oid)
@@ -5,8 +7,9 @@
  * @property {string} email
  * @property {string[]} roles - app roles from the App Registration
  * @property {string} [loginHint] - used to skip the account picker on sign out
- * @property {string} accessToken - for the backend API; never sent to the browser
- * @property {string} refreshToken
+ * @property {string|null} accessToken - for the backend API; never sent to the browser. Null for a local developer session
+ * @property {string|null} refreshToken
+ * @property {boolean} [isLocalDeveloper] - the fake local developer session
  * @property {string|null} expiresAt - when the access token expires (ISO 8601)
  */
 
@@ -42,6 +45,24 @@ export function createUserSession({
     accessToken,
     refreshToken,
     expiresAt: expiresAtFrom(expiresIn)
+  }
+}
+
+/**
+ * Builds the session for the fake local developer. Same shape as a real
+ * session, but with no tokens, and marked so it is honoured only while local
+ * sign-in is enabled.
+ * @param {string} role - one of the app roles
+ * @returns {UserSession}
+ */
+export function createLocalUserSession(role) {
+  return {
+    ...createUserSession({
+      accessToken: null,
+      refreshToken: null,
+      claims: localDeveloperClaims(role)
+    }),
+    isLocalDeveloper: true
   }
 }
 
@@ -90,6 +111,17 @@ export async function validateUserSession(request, cookieSession) {
   }
 
   const userSessionCache = request.server.userSessionCache
+
+  // A local developer session has no tokens to refresh, and counts only while
+  // local sign-in is still enabled
+  if (userSession.isLocalDeveloper) {
+    if (isLocalSignInEnabled()) {
+      return { isValid: true, credentials: userSession }
+    }
+    await userSessionCache.drop(sessionId)
+    return { isValid: false }
+  }
+
   try {
     const { token, refreshed } = await request.ensureValidToken(userSession)
     if (!refreshed) {

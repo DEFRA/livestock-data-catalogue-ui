@@ -24,6 +24,82 @@ async function loadConfig() {
   return config
 }
 
+describe('#config local sign-in settings', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  test('is off by default, with the Administrator role', async () => {
+    const config = await loadConfig()
+
+    expect(config.get('auth.localSignIn')).toBe(false)
+    expect(config.get('auth.localSignInRole')).toBe('Administrator')
+    expect(config.get('cdpEnvironment')).toBeNull()
+  })
+
+  test('starts when it is on in the local CDP environment', async () => {
+    vi.stubEnv('LOCAL_SIGN_IN', 'true')
+    vi.stubEnv('ENVIRONMENT', 'local')
+    vi.stubEnv('LOCAL_SIGN_IN_ROLE', 'DataOwner')
+
+    const config = await loadConfig()
+
+    expect(config.get('auth.localSignIn')).toBe(true)
+    expect(config.get('auth.localSignInRole')).toBe('DataOwner')
+  })
+
+  test('refuses to start when it is on in production, even if ENVIRONMENT is local', async () => {
+    stubProductionEnv({ LOCAL_SIGN_IN: 'true', ENVIRONMENT: 'local' })
+
+    await expect(loadConfig()).rejects.toThrow(
+      'LOCAL_SIGN_IN must not be true in production'
+    )
+  })
+
+  test.each(['dev', 'test', 'perf-test', 'ext-test', 'prod', 'Local', ''])(
+    'refuses to start when it is on and ENVIRONMENT is "%s"',
+    async (environment) => {
+      vi.stubEnv('LOCAL_SIGN_IN', 'true')
+      vi.stubEnv('ENVIRONMENT', environment)
+
+      await expect(loadConfig()).rejects.toThrow(
+        'LOCAL_SIGN_IN is only allowed when ENVIRONMENT is local'
+      )
+    }
+  )
+
+  test('refuses to start when it is on and ENVIRONMENT is not set', async () => {
+    vi.stubEnv('LOCAL_SIGN_IN', 'true')
+    vi.stubEnv('ENVIRONMENT', undefined)
+
+    await expect(loadConfig()).rejects.toThrow(
+      'LOCAL_SIGN_IN is only allowed when ENVIRONMENT is local'
+    )
+  })
+
+  test('refuses to start with a role that is not allowed', async () => {
+    vi.stubEnv('LOCAL_SIGN_IN_ROLE', 'Owner')
+
+    await expect(loadConfig()).rejects.toThrow('auth.localSignInRole')
+  })
+
+  test('refuses to start when LOCAL_SIGN_IN is not exactly true or false', async () => {
+    vi.stubEnv('LOCAL_SIGN_IN', 'yes')
+    vi.stubEnv('ENVIRONMENT', 'local')
+
+    await expect(loadConfig()).rejects.toThrow('auth.localSignIn')
+  })
+
+  test('production starts when it is off', async () => {
+    stubProductionEnv({ LOCAL_SIGN_IN: 'false' })
+
+    const config = await loadConfig()
+
+    expect(config.get('auth.localSignIn')).toBe(false)
+  })
+})
+
 describe('#config authentication settings', () => {
   afterEach(() => {
     vi.unstubAllEnvs()

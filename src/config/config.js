@@ -17,6 +17,8 @@ const guidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const scopeNamePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
+const localRoles = ['Administrator', 'DataSteward', 'DataOwner']
+
 const isProduction = process.env.NODE_ENV === 'production'
 const isTest = process.env.NODE_ENV === 'test'
 const isDevelopment = process.env.NODE_ENV === 'development'
@@ -35,6 +37,17 @@ function scopeNameFormat(value) {
   }
 }
 
+function strictBooleanFormat(value) {
+  if (
+    value !== true &&
+    value !== false &&
+    value !== 'true' &&
+    value !== 'false'
+  ) {
+    throw new Error('must be exactly true or false')
+  }
+}
+
 function cookiePasswordFormat(value) {
   if (typeof value !== 'string' || value.length < minimumCookiePasswordLength) {
     throw new Error(
@@ -44,6 +57,16 @@ function cookiePasswordFormat(value) {
 }
 
 convict.addFormats(convictFormatWithValidator)
+
+// Convict's own boolean reading treats any word other than false, such as yes,
+// as true. That is too loose for a setting that skips sign-in, so only the
+// exact text true or false is accepted. Anything else is left as it is, for
+// the format check to reject.
+convict.addFormat({
+  name: 'strict-boolean',
+  validate: strictBooleanFormat,
+  coerce: (value) => ({ true: true, false: false })[value] ?? value
+})
 
 export const config = convict({
   serviceVersion: {
@@ -86,6 +109,13 @@ export const config = convict({
     format: String,
     default: '/public',
     env: 'ASSET_PATH'
+  },
+  cdpEnvironment: {
+    doc: 'The CDP environment name. CDP sets ENVIRONMENT in every environment; set it to local on a developer machine. Unset means not local',
+    format: String,
+    nullable: true,
+    default: null,
+    env: 'ENVIRONMENT'
   },
   isProduction: {
     doc: 'If this application running in the production environment',
@@ -352,6 +382,18 @@ export const config = convict({
         env: 'ENTRA_STATE_COOKIE_SAME_SITE'
       }
     },
+    localSignIn: {
+      doc: 'Signs every visitor in as a fake local developer, with no Entra ID. For a developer machine only: the service refuses to start unless ENVIRONMENT is local and NODE_ENV is not production',
+      format: 'strict-boolean',
+      default: false,
+      env: 'LOCAL_SIGN_IN'
+    },
+    localSignInRole: {
+      doc: 'App role given to the fake local developer when LOCAL_SIGN_IN is true',
+      format: localRoles,
+      default: 'Administrator',
+      env: 'LOCAL_SIGN_IN_ROLE'
+    },
     sessionCookieName: {
       doc: 'Name of the cookie that keeps a user signed in',
       format: String,
@@ -404,6 +446,35 @@ function findProductionProblems(appConfig) {
   }
 
   return problems
+}
+
+/**
+ * Fails closed: local sign-in is allowed only when the CDP environment is
+ * exactly local and this is not a production build. Anything else, including
+ * an unset ENVIRONMENT, is a problem.
+ * @param {import('convict').Config<*>} appConfig - the validated config
+ * @returns {string[]} problems, empty when local sign-in is off or allowed
+ */
+function findLocalSignInProblems(appConfig) {
+  if (!appConfig.get('auth.localSignIn')) {
+    return []
+  }
+
+  const problems = []
+  if (appConfig.get('isProduction')) {
+    problems.push('LOCAL_SIGN_IN must not be true in production')
+  }
+  if (appConfig.get('cdpEnvironment') !== 'local') {
+    problems.push('LOCAL_SIGN_IN is only allowed when ENVIRONMENT is local')
+  }
+  return problems
+}
+
+const localSignInProblems = findLocalSignInProblems(config)
+if (localSignInProblems.length > 0) {
+  throw new Error(
+    `Configuration is not valid for local sign-in: ${localSignInProblems.join('; ')}`
+  )
 }
 
 if (config.get('isProduction')) {
