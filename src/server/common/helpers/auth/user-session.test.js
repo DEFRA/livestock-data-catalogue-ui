@@ -23,7 +23,7 @@ describe('#validateUserSession for a local developer session', () => {
   afterEach(() => {
     config.set('auth.localSignIn', false)
     config.set('cdpEnvironment', null)
-    config.set('host', '0.0.0.0')
+    config.reset('host')
   })
 
   function requestWithSession(session) {
@@ -52,6 +52,24 @@ describe('#validateUserSession for a local developer session', () => {
 
     expect(result).toEqual({ isValid: true, credentials: session })
     expect(ensureValidToken).not.toHaveBeenCalled()
+  })
+
+  test('is dropped, not an error, when checking local sign-in throws', async () => {
+    config.set('auth.localSignIn', true)
+    config.set('cdpEnvironment', 'local')
+    config.set('host', '127.0.0.1')
+    const { request, drop } = requestWithSession(
+      createLocalUserSession('Administrator')
+    )
+    vi.spyOn(config, 'get').mockImplementation(() => {
+      throw new Error('config unavailable')
+    })
+
+    const result = await validateUserSession(request, { sessionId: 'fake' })
+    vi.restoreAllMocks()
+
+    expect(result).toEqual({ isValid: false })
+    expect(drop).toHaveBeenCalledWith('fake')
   })
 
   test('is dropped and treated as signed out when local sign-in is off', async () => {

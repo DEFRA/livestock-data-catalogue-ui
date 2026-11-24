@@ -24,7 +24,7 @@ function turnOffLocalSignIn() {
   config.set('auth.localSignInRole', 'DataOwner')
   config.set('assetPath', '/public')
   config.set('cdpEnvironment', null)
-  config.set('host', '0.0.0.0')
+  config.reset('host')
 }
 
 async function signInLocally(server, next = '/about') {

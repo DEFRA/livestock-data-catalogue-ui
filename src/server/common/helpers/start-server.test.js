@@ -53,7 +53,7 @@ describe('#startServer', () => {
     afterEach(() => {
       config.set('auth.localSignIn', false)
       config.set('cdpEnvironment', null)
-      config.set('host', '0.0.0.0')
+      config.reset('host')
     })
 
     function fakeServer() {

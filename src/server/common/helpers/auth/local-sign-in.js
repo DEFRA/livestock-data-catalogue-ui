@@ -16,10 +16,16 @@ const localDeveloper = {
  * @param {import('convict').Config<*>} [appConfig]
  */
 export function isLocalSignInEnabled(appConfig = config) {
-  return (
-    appConfig.get('auth.localSignIn') === true &&
-    findLocalSignInProblems(appConfig).length === 0
-  )
+  // Fail closed: if the config can't be read, local sign-in is off. The error
+  // is not logged, as it could carry config values.
+  try {
+    return (
+      appConfig.get('auth.localSignIn') === true &&
+      findLocalSignInProblems(appConfig).length === 0
+    )
+  } catch {
+    return false
+  }
 }
 
 /**
