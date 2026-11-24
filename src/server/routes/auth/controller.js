@@ -5,7 +5,10 @@ import Joi from 'joi'
 import { config } from '#/config/config.js'
 import { authPaths } from '#/server/common/constants/auth-paths.js'
 import { entraDiscoveryUri } from '#/server/common/helpers/auth/entra.js'
-import { safeReturnPath } from '#/server/common/helpers/auth/return-path.js'
+import {
+  isAssetPath,
+  safeReturnPath
+} from '#/server/common/helpers/auth/return-path.js'
 import { signOutRedirectUrl } from '#/server/common/helpers/auth/sign-out-redirect.js'
 import {
   createLocalUserSession,
@@ -57,7 +60,7 @@ async function completeSignIn(request, h) {
 // Local development only: no Entra ID. Asset requests are refused, so a page
 // that only loads styles can't sign someone back in after they sign out.
 function signInLocally(request, h, returnPath) {
-  if (returnPath.startsWith(`${config.get('assetPath')}/`)) {
+  if (isAssetPath(returnPath, config.get('assetPath'))) {
     throw Boom.unauthorized()
   }
 
@@ -163,6 +166,7 @@ export const signOutController = {
   },
   async handler(request, h) {
     const sessionId = request.auth.artifacts?.sessionId
+    // Only a session that was really signed in locally skips Entra ID's sign-out
     const isLocalDeveloper =
       request.auth.isAuthenticated &&
       request.auth.credentials.isLocalDeveloper === true

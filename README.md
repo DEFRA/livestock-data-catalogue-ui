@@ -143,10 +143,11 @@ browser.
 | `SESSION_CACHE_TTL`                   | How long a session (including the user's details and tokens) is kept in Redis after it was last saved, in milliseconds                      | 4 hours                                              | No            |
 | `ENVIRONMENT`                         | The CDP environment name. CDP sets it. Set it to `local` on your machine to allow `LOCAL_SIGN_IN`                                           | Not set                                              | No            |
 | `LOCAL_SIGN_IN`                       | `true` signs every visitor in as a fake developer, with no Entra ID. Local development only. Only the exact text `true` or `false` is valid | `false`                                              | No            |
-| `LOCAL_SIGN_IN_ROLE`                  | Role of the fake developer: `Administrator`, `DataSteward` or `DataOwner`                                                                   | `Administrator`                                      | No            |
+| `LOCAL_SIGN_IN_ROLE`                  | Role of the fake developer: `DataOwner` (least access), `DataSteward` or `Administrator`                                                    | `DataOwner`                                          | No            |
 
-The service refuses to start if `LOCAL_SIGN_IN` is `true` and `NODE_ENV` is `production`, or `ENVIRONMENT` is not
-exactly `local` (including when it is not set).
+The service refuses to start if `LOCAL_SIGN_IN` is `true` and `NODE_ENV` is `production`, `ENVIRONMENT` is not exactly
+`local` (including when it is not set), `HOST` is not `127.0.0.1`, `localhost` or `::1`, or the session cache is a Redis
+that is not local. See [Signing in locally](#signing-in-locally).
 
 In production (`NODE_ENV=production`, which includes every CDP environment) the service refuses to start if
 `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `APP_BASE_URL` or `SESSION_COOKIE_PASSWORD` is missing, if `APP_BASE_URL`
@@ -197,8 +198,9 @@ Until the real App Registration exists, you can sign in as a fake developer. Add
 
 ```bash
 ENVIRONMENT=local
+HOST=127.0.0.1
 LOCAL_SIGN_IN=true
-# Optional: Administrator (the default), DataSteward or DataOwner
+# Optional: DataOwner (the default, least access), DataSteward or Administrator
 LOCAL_SIGN_IN_ROLE=DataSteward
 ```
 
@@ -207,9 +209,21 @@ email address `local.developer@example.invalid` and the role you chose. It uses 
 sign-in, so pages behave as they will in production, but it stores no tokens and makes no call to Entra ID. The service
 logs one warning at start-up to say it is on, and never logs the fake user's details.
 
-It is for your own machine only. The service refuses to start if `LOCAL_SIGN_IN` is `true` and `NODE_ENV` is
-`production`, or `ENVIRONMENT` is anything but `local` (CDP sets `ENVIRONMENT` itself, so every CDP environment is
-refused). A saved fake session also stops working as soon as the setting is turned off.
+Because the session has no access token, a call to the backend API can't be authorised with it. Nothing in this service
+makes such a call yet. When one is added, it must fail with a clear message for a local session, and you will need a
+stubbed or local backend that accepts it.
+
+It is for your own machine only. Signing in is a plain `GET` to `/auth/sign-in`, so anything that can reach the
+service, or any page that makes your browser request it, signs in as the fake user. The service refuses to start if
+`LOCAL_SIGN_IN` is `true` and any of these is not met:
+
+- `NODE_ENV` is not `production`.
+- `ENVIRONMENT` is exactly `local` (CDP sets `ENVIRONMENT` itself, so every CDP environment is refused).
+- `HOST` is `127.0.0.1`, `localhost` or `::1`, so only your own machine can reach it. The default `0.0.0.0` is refused.
+- The session cache is in memory (the local default), or Redis with `REDIS_HOST` set to `localhost`, `127.0.0.1`, `::1`
+  or `redis` (the `compose.yml` service name). This keeps fake sessions out of a shared Redis.
+
+A saved fake session also stops working as soon as the setting is turned off.
 
 Without `LOCAL_SIGN_IN`, the service starts and `/health` works, but every page redirects to `/auth/sign-in`, which
 can't complete without the real App Registration.

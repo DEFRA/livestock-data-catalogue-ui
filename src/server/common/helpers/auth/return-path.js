@@ -15,6 +15,25 @@ function decodedPathname(returnPath) {
 }
 
 /**
+ * Whether a path is the asset folder or inside it. Compares the decoded path
+ * without regard to case, and ignores a trailing slash on the asset path, so
+ * /%70ublic/x and /Public/x count. Malformed encoding counts as an asset path,
+ * so it fails closed.
+ * @param {string} returnPath
+ * @param {string} assetPath - the configured ASSET_PATH
+ */
+export function isAssetPath(returnPath, assetPath) {
+  const pathname = decodedPathname(returnPath)
+  if (pathname === null) {
+    return true
+  }
+
+  const folder = assetPath.replace(/\/+$/, '').toLowerCase()
+  const path = pathname.toLowerCase()
+  return path === folder || path.startsWith(`${folder}/`)
+}
+
+/**
  * Where to send a user after they sign in. Only paths on this service are
  * allowed, and never the sign-in routes themselves: the callback can only be
  * used once, and returning to sign-out would sign the user straight out.

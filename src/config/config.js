@@ -18,6 +18,9 @@ const guidPattern =
 const scopeNamePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
 const localRoles = ['Administrator', 'DataSteward', 'DataOwner']
+const loopbackHosts = ['127.0.0.1', 'localhost', '::1']
+// "redis" is the service name in compose.yml
+const localRedisHosts = [...loopbackHosts, 'redis']
 
 const isProduction = process.env.NODE_ENV === 'production'
 const isTest = process.env.NODE_ENV === 'test'
@@ -111,7 +114,7 @@ export const config = convict({
     env: 'ASSET_PATH'
   },
   cdpEnvironment: {
-    doc: 'The CDP environment name. CDP sets ENVIRONMENT in every environment; set it to local on a developer machine. Unset means not local',
+    doc: 'The CDP environment name, set by CDP. Set it to local on a developer machine',
     format: String,
     nullable: true,
     default: null,
@@ -391,7 +394,7 @@ export const config = convict({
     localSignInRole: {
       doc: 'App role given to the fake local developer when LOCAL_SIGN_IN is true',
       format: localRoles,
-      default: 'Administrator',
+      default: 'DataOwner',
       env: 'LOCAL_SIGN_IN_ROLE'
     },
     sessionCookieName: {
@@ -466,6 +469,21 @@ function findLocalSignInProblems(appConfig) {
   }
   if (appConfig.get('cdpEnvironment') !== 'local') {
     problems.push('LOCAL_SIGN_IN is only allowed when ENVIRONMENT is local')
+  }
+  // The default HOST listens on every address, so anyone on the network could
+  // reach the fake user
+  if (!loopbackHosts.includes(appConfig.get('host'))) {
+    problems.push('LOCAL_SIGN_IN needs HOST to be 127.0.0.1, localhost or ::1')
+  }
+  // Fake sessions must not be written to a shared Redis, where a real session
+  // store could read them
+  if (
+    appConfig.get('session.cache.engine') === 'redis' &&
+    !localRedisHosts.includes(appConfig.get('redis.host'))
+  ) {
+    problems.push(
+      'LOCAL_SIGN_IN needs the in-memory session cache or a local Redis (REDIS_HOST of localhost, 127.0.0.1, ::1 or redis)'
+    )
   }
   return problems
 }

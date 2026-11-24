@@ -18,6 +18,19 @@ function stubProductionEnv(overrides = {}) {
   }
 }
 
+// The settings that allow local sign-in. Pass undefined to leave one unset.
+function stubLocalSignInEnv(overrides = {}) {
+  const env = {
+    LOCAL_SIGN_IN: 'true',
+    ENVIRONMENT: 'local',
+    HOST: '127.0.0.1',
+    ...overrides
+  }
+  for (const [name, value] of Object.entries(env)) {
+    vi.stubEnv(name, value)
+  }
+}
+
 async function loadConfig() {
   vi.resetModules()
   const { config } = await import('./config.js')
@@ -30,23 +43,90 @@ describe('#config local sign-in settings', () => {
     vi.resetModules()
   })
 
-  test('is off by default, with the Administrator role', async () => {
+  test('is off by default, with the DataOwner role', async () => {
     const config = await loadConfig()
 
     expect(config.get('auth.localSignIn')).toBe(false)
-    expect(config.get('auth.localSignInRole')).toBe('Administrator')
+    expect(config.get('auth.localSignInRole')).toBe('DataOwner')
     expect(config.get('cdpEnvironment')).toBeNull()
   })
 
-  test('starts when it is on in the local CDP environment', async () => {
-    vi.stubEnv('LOCAL_SIGN_IN', 'true')
-    vi.stubEnv('ENVIRONMENT', 'local')
-    vi.stubEnv('LOCAL_SIGN_IN_ROLE', 'DataOwner')
+  test('starts when it is on in the local CDP environment, listening on loopback', async () => {
+    stubLocalSignInEnv({ LOCAL_SIGN_IN_ROLE: 'Administrator' })
 
     const config = await loadConfig()
 
     expect(config.get('auth.localSignIn')).toBe(true)
-    expect(config.get('auth.localSignInRole')).toBe('DataOwner')
+    expect(config.get('auth.localSignInRole')).toBe('Administrator')
+  })
+
+  test.each(['127.0.0.1', '::1'])(
+    'starts when listening on %s',
+    async (host) => {
+      stubLocalSignInEnv({ HOST: host })
+
+      const config = await loadConfig()
+
+      expect(config.get('auth.localSignIn')).toBe(true)
+    }
+  )
+
+  test.each(['0.0.0.0', '::', '192.168.1.20'])(
+    'refuses to start when it is on and the service listens on %s',
+    async (host) => {
+      stubLocalSignInEnv({ HOST: host })
+
+      await expect(loadConfig()).rejects.toThrow(
+        'LOCAL_SIGN_IN needs HOST to be 127.0.0.1, localhost or ::1'
+      )
+    }
+  )
+
+  test('refuses to start when it is on and HOST is not set, because the default listens on every address', async () => {
+    stubLocalSignInEnv({ HOST: undefined })
+
+    await expect(loadConfig()).rejects.toThrow(
+      'LOCAL_SIGN_IN needs HOST to be 127.0.0.1, localhost or ::1'
+    )
+  })
+
+  test.each(['localhost', '127.0.0.1', '::1', 'redis'])(
+    'starts when it is on and the session cache is Redis on %s',
+    async (redisHost) => {
+      stubLocalSignInEnv({
+        SESSION_CACHE_ENGINE: 'redis',
+        REDIS_HOST: redisHost
+      })
+
+      const config = await loadConfig()
+
+      expect(config.get('auth.localSignIn')).toBe(true)
+    }
+  )
+
+  test.each(['redis.example.internal', '10.0.0.5', 'LOCALHOST.evil.example'])(
+    'refuses to start when it is on and the session cache is Redis on %s',
+    async (redisHost) => {
+      stubLocalSignInEnv({
+        SESSION_CACHE_ENGINE: 'redis',
+        REDIS_HOST: redisHost
+      })
+
+      await expect(loadConfig()).rejects.toThrow(
+        'LOCAL_SIGN_IN needs the in-memory session cache or a local Redis'
+      )
+    }
+  )
+
+  test('starts when it is on with the in-memory session cache, whatever REDIS_HOST is', async () => {
+    stubLocalSignInEnv({
+      SESSION_CACHE_ENGINE: 'memory',
+      REDIS_HOST: 'redis.example.internal'
+    })
+
+    const config = await loadConfig()
+
+    expect(config.get('auth.localSignIn')).toBe(true)
   })
 
   test('refuses to start when it is on in production, even if ENVIRONMENT is local', async () => {
@@ -60,8 +140,7 @@ describe('#config local sign-in settings', () => {
   test.each(['dev', 'test', 'perf-test', 'ext-test', 'prod', 'Local', ''])(
     'refuses to start when it is on and ENVIRONMENT is "%s"',
     async (environment) => {
-      vi.stubEnv('LOCAL_SIGN_IN', 'true')
-      vi.stubEnv('ENVIRONMENT', environment)
+      stubLocalSignInEnv({ ENVIRONMENT: environment })
 
       await expect(loadConfig()).rejects.toThrow(
         'LOCAL_SIGN_IN is only allowed when ENVIRONMENT is local'
@@ -70,8 +149,7 @@ describe('#config local sign-in settings', () => {
   )
 
   test('refuses to start when it is on and ENVIRONMENT is not set', async () => {
-    vi.stubEnv('LOCAL_SIGN_IN', 'true')
-    vi.stubEnv('ENVIRONMENT', undefined)
+    stubLocalSignInEnv({ ENVIRONMENT: undefined })
 
     await expect(loadConfig()).rejects.toThrow(
       'LOCAL_SIGN_IN is only allowed when ENVIRONMENT is local'
@@ -85,8 +163,7 @@ describe('#config local sign-in settings', () => {
   })
 
   test('refuses to start when LOCAL_SIGN_IN is not exactly true or false', async () => {
-    vi.stubEnv('LOCAL_SIGN_IN', 'yes')
-    vi.stubEnv('ENVIRONMENT', 'local')
+    stubLocalSignInEnv({ LOCAL_SIGN_IN: 'yes' })
 
     await expect(loadConfig()).rejects.toThrow('auth.localSignIn')
   })

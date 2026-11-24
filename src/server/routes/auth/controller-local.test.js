@@ -12,7 +12,7 @@ function cookieFrom(response) {
   return header?.split(';')[0]
 }
 
-function turnOnLocalSignIn(role = 'Administrator') {
+function turnOnLocalSignIn(role = 'DataOwner') {
   config.set('auth.localSignIn', true)
   config.set('auth.localSignInRole', role)
   config.set('cdpEnvironment', 'local')
@@ -20,7 +20,8 @@ function turnOnLocalSignIn(role = 'Administrator') {
 
 function turnOffLocalSignIn() {
   config.set('auth.localSignIn', false)
-  config.set('auth.localSignInRole', 'Administrator')
+  config.set('auth.localSignInRole', 'DataOwner')
+  config.set('assetPath', '/public')
   config.set('cdpEnvironment', null)
 }
 
@@ -133,16 +134,58 @@ describe('Signing in locally, with no Entra ID', () => {
     expect(response.statusCode).toBe(200)
   })
 
-  test('does not sign in for an asset request, so a signed-out page does not sign the user back in', async () => {
+  test.each([
+    ['an asset', '/public/assets/app.css'],
+    ['an asset with a query', '/public/assets/app.css?v=1'],
+    ['an encoded asset path', '/%70ublic/assets/app.css'],
+    ['a differently cased asset path', '/Public/assets/app.css'],
+    ['the asset folder itself', '/public'],
+    ['the asset folder with a trailing slash', '/public/']
+  ])(
+    'does not sign in for %s, so a signed-out page does not sign the user back in',
+    async (_name, assetPath) => {
+      turnOnLocalSignIn()
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/auth/sign-in?next=${encodeURIComponent(assetPath)}`
+      })
+
+      expect(response.statusCode).toBe(401)
+      expect(cookieFrom(response)).toBeUndefined()
+    }
+  )
+
+  test.each(['/static', '/static/'])(
+    'guards a custom ASSET_PATH of %s, and no longer guards /public',
+    async (customAssetPath) => {
+      turnOnLocalSignIn()
+      config.set('assetPath', customAssetPath)
+
+      const asset = await server.inject({
+        method: 'GET',
+        url: `/auth/sign-in?next=${encodeURIComponent('/%73tatic/app.css')}`
+      })
+      const page = await server.inject({
+        method: 'GET',
+        url: `/auth/sign-in?next=${encodeURIComponent('/public/app.css')}`
+      })
+
+      expect(asset.statusCode).toBe(401)
+      expect(page.statusCode).toBe(303)
+    }
+  )
+
+  test('signs in for a page whose name only starts like the asset path', async () => {
     turnOnLocalSignIn()
 
     const response = await server.inject({
       method: 'GET',
-      url: `/auth/sign-in?next=${encodeURIComponent('/public/assets/app.css')}`
+      url: `/auth/sign-in?next=${encodeURIComponent('/public-page')}`
     })
 
-    expect(response.statusCode).toBe(401)
-    expect(cookieFrom(response)).toBeUndefined()
+    expect(response.statusCode).toBe(303)
+    expect(cookieFrom(response)).toBeDefined()
   })
 
   test('stops honouring the session once local sign-in is turned off', async () => {
