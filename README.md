@@ -146,7 +146,7 @@ browser.
 | `LOCAL_SIGN_IN_ROLE`                  | Role of the fake developer: `DataOwner` (least access), `DataSteward` or `Administrator`                                                    | `DataOwner`                                          | No            |
 
 The service refuses to start if `LOCAL_SIGN_IN` is `true` and `NODE_ENV` is `production`, `ENVIRONMENT` is not exactly
-`local` (including when it is not set), `HOST` is not `127.0.0.1`, `localhost` or `::1`, or the session cache is a Redis
+`local` (including when it is not set), `HOST` is not `127.0.0.1` or `::1`, or the session cache is a Redis
 that is not local. See [Signing in locally](#signing-in-locally).
 
 In production (`NODE_ENV=production`, which includes every CDP environment) the service refuses to start if
@@ -219,11 +219,18 @@ service, or any page that makes your browser request it, signs in as the fake us
 
 - `NODE_ENV` is not `production`.
 - `ENVIRONMENT` is exactly `local` (CDP sets `ENVIRONMENT` itself, so every CDP environment is refused).
-- `HOST` is `127.0.0.1`, `localhost` or `::1`, so only your own machine can reach it. The default `0.0.0.0` is refused.
+- `HOST` is `127.0.0.1` or `::1` (`HOST` must be an IP address, so `localhost` isn't accepted), so only your own
+  machine can reach it. The default `0.0.0.0` is refused.
 - The session cache is in memory (the local default), or Redis with `REDIS_HOST` set to `localhost`, `127.0.0.1`, `::1`
-  or `redis` (the `compose.yml` service name). This keeps fake sessions out of a shared Redis.
+  or `redis` (the `compose.yml` service name). This keeps fake sessions out of a shared Redis. The name `redis` must
+  resolve to a container on your own machine; if you aren't sure, use `REDIS_HOST=127.0.0.1`.
 
-A saved fake session also stops working as soon as the setting is turned off.
+A saved fake session also stops working as soon as the setting is turned off, or if `HOST` or the session cache stops
+meeting these rules. The same refusal happens in any tool or script that imports `src/config/config.js` with these
+settings, not only when the server starts.
+
+The first code that calls the backend API with a user's token (the first backend client) must check for a local session
+and fail clearly. This is tracked in [LDATSPR-8](https://eaflood.atlassian.net/browse/LDATSPR-8).
 
 Without `LOCAL_SIGN_IN`, the service starts and `/health` works, but every page redirects to `/auth/sign-in`, which
 can't complete without the real App Registration.

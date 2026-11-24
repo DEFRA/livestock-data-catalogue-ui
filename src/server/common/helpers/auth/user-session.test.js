@@ -23,6 +23,7 @@ describe('#validateUserSession for a local developer session', () => {
   afterEach(() => {
     config.set('auth.localSignIn', false)
     config.set('cdpEnvironment', null)
+    config.set('host', '0.0.0.0')
   })
 
   function requestWithSession(session) {
@@ -43,6 +44,7 @@ describe('#validateUserSession for a local developer session', () => {
   test('is valid, with no token refresh, while local sign-in is enabled', async () => {
     config.set('auth.localSignIn', true)
     config.set('cdpEnvironment', 'local')
+    config.set('host', '127.0.0.1')
     const session = createLocalUserSession('Administrator')
     const { request, ensureValidToken } = requestWithSession(session)
 

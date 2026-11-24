@@ -1,3 +1,4 @@
+import { config } from '#/config/config.js'
 import { isLocalSignInEnabled, localDeveloperClaims } from './local-sign-in.js'
 
 function fakeConfig(values) {
@@ -7,7 +8,10 @@ function fakeConfig(values) {
 const allowed = {
   'auth.localSignIn': true,
   isProduction: false,
-  cdpEnvironment: 'local'
+  cdpEnvironment: 'local',
+  host: '127.0.0.1',
+  'session.cache.engine': 'memory',
+  'redis.host': '127.0.0.1'
 }
 
 describe('#isLocalSignInEnabled', () => {
@@ -22,11 +26,39 @@ describe('#isLocalSignInEnabled', () => {
     ['the CDP environment is dev', { cdpEnvironment: 'dev' }],
     ['the CDP environment is prod', { cdpEnvironment: 'prod' }],
     ['the CDP environment is not set', { cdpEnvironment: null }],
-    ['the CDP environment is in capitals', { cdpEnvironment: 'LOCAL' }]
+    ['the CDP environment is in capitals', { cdpEnvironment: 'LOCAL' }],
+    ['the service listens on every address', { host: '0.0.0.0' }],
+    ['the service listens on a network address', { host: '192.168.1.20' }],
+    [
+      'the session cache is a shared Redis',
+      {
+        'session.cache.engine': 'redis',
+        'redis.host': 'redis.example.internal'
+      }
+    ]
   ])('is off when %s', (_name, override) => {
     expect(isLocalSignInEnabled(fakeConfig({ ...allowed, ...override }))).toBe(
       false
     )
+  })
+})
+
+describe('#isLocalSignInEnabled with the real config', () => {
+  afterEach(() => {
+    config.set('auth.localSignIn', false)
+    config.set('cdpEnvironment', null)
+    config.set('host', '0.0.0.0')
+  })
+
+  test('is turned off when the host is changed to every address after start-up', () => {
+    config.set('auth.localSignIn', true)
+    config.set('cdpEnvironment', 'local')
+    config.set('host', '127.0.0.1')
+    expect(isLocalSignInEnabled()).toBe(true)
+
+    config.set('host', '0.0.0.0')
+
+    expect(isLocalSignInEnabled()).toBe(false)
   })
 })
 

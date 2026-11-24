@@ -1,4 +1,4 @@
-import { config } from '#/config/config.js'
+import { config, findLocalSignInProblems } from '#/config/config.js'
 
 // Made-up values that are obviously not a real person. The .invalid domain can
 // never receive email.
@@ -11,14 +11,14 @@ const localDeveloper = {
 /**
  * Whether visitors are signed in as the fake local developer. Checked on every
  * use, not just at start-up, and fails closed: it is on only when the setting
- * is true, this is not production and the CDP environment is exactly local.
+ * is true and none of the start-up rules for local sign-in is broken (not
+ * production, CDP environment local, loopback host, local session cache).
  * @param {import('convict').Config<*>} [appConfig]
  */
 export function isLocalSignInEnabled(appConfig = config) {
   return (
     appConfig.get('auth.localSignIn') === true &&
-    appConfig.get('isProduction') === false &&
-    appConfig.get('cdpEnvironment') === 'local'
+    findLocalSignInProblems(appConfig).length === 0
   )
 }
 

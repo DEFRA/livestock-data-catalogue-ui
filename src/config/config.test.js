@@ -71,13 +71,19 @@ describe('#config local sign-in settings', () => {
     }
   )
 
+  test('refuses HOST=localhost, because HOST must be an IP address', async () => {
+    stubLocalSignInEnv({ HOST: 'localhost' })
+
+    await expect(loadConfig()).rejects.toThrow('host: must be an IP address')
+  })
+
   test.each(['0.0.0.0', '::', '192.168.1.20'])(
     'refuses to start when it is on and the service listens on %s',
     async (host) => {
       stubLocalSignInEnv({ HOST: host })
 
       await expect(loadConfig()).rejects.toThrow(
-        'LOCAL_SIGN_IN needs HOST to be 127.0.0.1, localhost or ::1'
+        'LOCAL_SIGN_IN needs HOST to be 127.0.0.1 or ::1'
       )
     }
   )
@@ -86,7 +92,7 @@ describe('#config local sign-in settings', () => {
     stubLocalSignInEnv({ HOST: undefined })
 
     await expect(loadConfig()).rejects.toThrow(
-      'LOCAL_SIGN_IN needs HOST to be 127.0.0.1, localhost or ::1'
+      'LOCAL_SIGN_IN needs HOST to be 127.0.0.1 or ::1'
     )
   })
 

@@ -53,6 +53,7 @@ describe('#startServer', () => {
     afterEach(() => {
       config.set('auth.localSignIn', false)
       config.set('cdpEnvironment', null)
+      config.set('host', '0.0.0.0')
     })
 
     function fakeServer() {
@@ -65,6 +66,7 @@ describe('#startServer', () => {
     test('Should log one warning, with no user details', async () => {
       config.set('auth.localSignIn', true)
       config.set('cdpEnvironment', 'local')
+      config.set('host', '127.0.0.1')
       const server = fakeServer()
       createServerSpy.mockResolvedValue(server)
 

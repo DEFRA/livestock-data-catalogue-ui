@@ -18,9 +18,9 @@ const guidPattern =
 const scopeNamePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
 const localRoles = ['Administrator', 'DataSteward', 'DataOwner']
-const loopbackHosts = ['127.0.0.1', 'localhost', '::1']
+const loopbackHosts = ['127.0.0.1', '::1']
 // "redis" is the service name in compose.yml
-const localRedisHosts = [...loopbackHosts, 'redis']
+const localRedisHosts = [...loopbackHosts, 'localhost', 'redis']
 
 const isProduction = process.env.NODE_ENV === 'production'
 const isTest = process.env.NODE_ENV === 'test'
@@ -458,7 +458,7 @@ function findProductionProblems(appConfig) {
  * @param {import('convict').Config<*>} appConfig - the validated config
  * @returns {string[]} problems, empty when local sign-in is off or allowed
  */
-function findLocalSignInProblems(appConfig) {
+export function findLocalSignInProblems(appConfig) {
   if (!appConfig.get('auth.localSignIn')) {
     return []
   }
@@ -473,7 +473,7 @@ function findLocalSignInProblems(appConfig) {
   // The default HOST listens on every address, so anyone on the network could
   // reach the fake user
   if (!loopbackHosts.includes(appConfig.get('host'))) {
-    problems.push('LOCAL_SIGN_IN needs HOST to be 127.0.0.1, localhost or ::1')
+    problems.push('LOCAL_SIGN_IN needs HOST to be 127.0.0.1 or ::1')
   }
   // Fake sessions must not be written to a shared Redis, where a real session
   // store could read them
