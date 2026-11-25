@@ -5,9 +5,16 @@ import Joi from 'joi'
 import { config } from '#/config/config.js'
 import { authPaths } from '#/server/common/constants/auth-paths.js'
 import { entraDiscoveryUri } from '#/server/common/helpers/auth/entra.js'
-import { safeReturnPath } from '#/server/common/helpers/auth/return-path.js'
+import {
+  isAssetPath,
+  safeReturnPath
+} from '#/server/common/helpers/auth/return-path.js'
 import { signOutRedirectUrl } from '#/server/common/helpers/auth/sign-out-redirect.js'
-import { createUserSession } from '#/server/common/helpers/auth/user-session.js'
+import {
+  createLocalUserSession,
+  createUserSession
+} from '#/server/common/helpers/auth/user-session.js'
+import { isLocalSignInEnabled } from '#/server/common/helpers/auth/local-sign-in.js'
 
 const authConfig = config.get('auth')
 const returnPathKey = 'authReturnPath'
@@ -26,19 +33,9 @@ function rejectCallback(request) {
   throw Boom.unauthorized()
 }
 
-async function completeSignIn(request, h) {
-  // Throws a 401 if the response fails the state, PKCE or token checks
-  const credentials = await request.callback(h)
-  if (!credentials?.claims?.oid) {
-    request.logger.warn('Sign-in response had no user identifier')
-    throw Boom.unauthorized()
-  }
-
+async function startSession(request, h, userSession) {
   const sessionId = randomUUID()
-  await request.server.userSessionCache.set(
-    sessionId,
-    createUserSession(credentials)
-  )
+  await request.server.userSessionCache.set(sessionId, userSession)
   request.sessionCookie.set({ sessionId })
   request.logger.info('User signed in')
 
@@ -47,6 +44,32 @@ async function completeSignIn(request, h) {
   // session store (yar) holding the return path can't be read here. A 303
   // turns it into a GET navigation to this service, which does carry them.
   return h.redirect(authPaths.signedIn).code(303)
+}
+
+async function completeSignIn(request, h) {
+  // Throws a 401 if the response fails the state, PKCE or token checks
+  const credentials = await request.callback(h)
+  if (!credentials?.claims?.oid) {
+    request.logger.warn('Sign-in response had no user identifier')
+    throw Boom.unauthorized()
+  }
+
+  return startSession(request, h, createUserSession(credentials))
+}
+
+// Local development only: no Entra ID. Asset requests are refused, so a page
+// that only loads styles can't sign someone back in after they sign out.
+function signInLocally(request, h, returnPath) {
+  if (isAssetPath(returnPath, config.get('assetPath'))) {
+    throw Boom.unauthorized()
+  }
+
+  request.yar.set(returnPathKey, returnPath)
+  return startSession(
+    request,
+    h,
+    createLocalUserSession(config.get('auth.localSignInRole'))
+  )
 }
 
 async function dropUserSession(request, sessionId) {
@@ -81,6 +104,10 @@ export const signInController = {
     // A cookie for a session that no longer works has already been cleared by
     // the session strategy (clearInvalid); any server copy has been dropped
     // by validation or expires after its TTL
+    if (isLocalSignInEnabled()) {
+      return signInLocally(request, h, returnPath)
+    }
+
     request.yar.set(returnPathKey, returnPath)
     return request.login(h)
   }
@@ -139,6 +166,10 @@ export const signOutController = {
   },
   async handler(request, h) {
     const sessionId = request.auth.artifacts?.sessionId
+    // Only a session that was really signed in locally skips Entra ID's sign-out
+    const isLocalDeveloper =
+      request.auth.isAuthenticated &&
+      request.auth.credentials.isLocalDeveloper === true
     const loginHint = request.auth.isAuthenticated
       ? request.auth.credentials.loginHint
       : undefined
@@ -151,6 +182,12 @@ export const signOutController = {
       await dropUserSession(request, sessionId)
     }
     request.logger.info('User signed out')
+
+    // A local developer was never signed in with Entra ID, so there is
+    // nothing to sign out of there, and no network call to make
+    if (isLocalDeveloper) {
+      return h.redirect(authPaths.signedOut)
+    }
 
     const redirectUrl = await signOutRedirectUrl({
       discoveryUri: entraDiscoveryUri(authConfig.tenantId),

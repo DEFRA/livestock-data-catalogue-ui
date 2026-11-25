@@ -141,6 +141,13 @@ browser.
 | `SESSION_COOKIE_SECURE`               | Only send the session and sign-in cookies over HTTPS. Production refuses `false`                                                            | `true` in production, `false` locally                | No            |
 | `SESSION_COOKIE_TTL`                  | How long the session and sign-in cookies last after the user's last request, in milliseconds                                                | 4 hours                                              | No            |
 | `SESSION_CACHE_TTL`                   | How long a session (including the user's details and tokens) is kept in Redis after it was last saved, in milliseconds                      | 4 hours                                              | No            |
+| `ENVIRONMENT`                         | The CDP environment name. CDP sets it. Set it to `local` on your machine to allow `LOCAL_SIGN_IN`                                           | Not set                                              | No            |
+| `LOCAL_SIGN_IN`                       | `true` signs every visitor in as a fake developer, with no Entra ID. Local development only. Only the exact text `true` or `false` is valid | `false`                                              | No            |
+| `LOCAL_SIGN_IN_ROLE`                  | Role of the fake developer: `DataOwner` (least access), `DataSteward` or `Administrator`                                                    | `DataOwner`                                          | No            |
+
+The service refuses to start if `LOCAL_SIGN_IN` is `true` and `NODE_ENV` is `production`, `ENVIRONMENT` is not exactly
+`local` (including when it is not set), `HOST` is not `127.0.0.1` or `::1`, or the session cache is a Redis
+that is not local. See [Signing in locally](#signing-in-locally).
 
 In production (`NODE_ENV=production`, which includes every CDP environment) the service refuses to start if
 `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `APP_BASE_URL` or `SESSION_COOKIE_PASSWORD` is missing, if `APP_BASE_URL`
@@ -186,13 +193,57 @@ lower environments and the `Defra` tenant for higher environments, including pro
 
 ### Signing in locally
 
-There is no local sign-in yet. Locally the service starts and `/health` works, but every page redirects to
-`/auth/sign-in`, which can't complete without the real App Registration. The pages that don't need sign-in (for
-example `/cookies` and `/auth/signed-out`) work, but in `npm run dev` their styles and scripts don't load, because the
-Vite development server's asset route also needs sign-in.
+Until the real App Registration exists, you can sign in as a fake developer. Add these to your `.env` file (see
+[.env.example](./.env.example)):
+
+```bash
+ENVIRONMENT=local
+HOST=127.0.0.1
+LOCAL_SIGN_IN=true
+# Optional: DataOwner (the default, least access), DataSteward or Administrator
+LOCAL_SIGN_IN_ROLE=DataSteward
+```
+
+Then run `npm run dev`. Any page that needs sign-in signs you in as "Local Developer", with a made-up object ID, the
+email address `local.developer@example.invalid` and the role you chose. It uses the same session code as the real
+sign-in, so pages behave as they will in production, but it stores no tokens and makes no call to Entra ID. The service
+logs one warning at start-up to say it is on, and never logs the fake user's details.
+
+Because the session has no access token, a call to the backend API can't be authorised with it. Nothing in this service
+makes such a call yet. When one is added, it must fail with a clear message for a local session, and you will need a
+stubbed or local backend that accepts it.
+
+It is for your own machine only. Signing in is a plain `GET` to `/auth/sign-in`, so anything that can reach the
+service, or any page that makes your browser request it, signs in as the fake user. The service refuses to start if
+`LOCAL_SIGN_IN` is `true` and any of these is not met:
+
+- `NODE_ENV` is not `production`.
+- `ENVIRONMENT` is exactly `local` (CDP sets `ENVIRONMENT` itself, so every CDP environment is refused).
+- `HOST` is `127.0.0.1` or `::1` (`HOST` must be an IP address, so `localhost` isn't accepted), so only your own
+  machine can reach it. The default `0.0.0.0` is refused.
+- The session cache is in memory (the local default), or Redis with `REDIS_HOST` set to `localhost`, `127.0.0.1`, `::1`
+  or `redis` (the `compose.yml` service name). This keeps fake sessions out of a shared Redis. The name `redis` must
+  resolve to a container on your own machine; if you aren't sure, use `REDIS_HOST=127.0.0.1`.
+
+A saved fake session also stops working as soon as the setting is turned off, or if `HOST` or the session cache stops
+meeting these rules. The same refusal happens in any tool or script that imports `src/config/config.js` with these
+settings, not only when the server starts.
+
+The first code that calls the backend API with a user's token (the first backend client) must check for a local session
+and fail clearly. This is tracked in [LDATSPR-8](https://eaflood.atlassian.net/browse/LDATSPR-8).
+
+Without `LOCAL_SIGN_IN`, the service starts and `/health` works, but every page redirects to `/auth/sign-in`, which
+can't complete without the real App Registration.
+
+In `npm run dev`, the styles and scripts come from the Vite development server, whose route needs sign-in like every
+other route. Once you are signed in they load. They don't load on pages you see while signed out (for example
+`/auth/signed-out`). We have not made that route public: it would also expose the Vite development server, which can
+serve source files, to anyone who can reach the service, and the library that mounts it has no way to switch off sign-in
+for one route. The sign-in route refuses to sign you in for an asset request, so a signed-out page can't sign you back
+in by itself.
 
 `docker compose up` runs this service with `NODE_ENV=production`, so it won't start without real Entra ID values, an
-`https://` `APP_BASE_URL`, a `SESSION_COOKIE_PASSWORD` and secure cookies.
+`https://` `APP_BASE_URL`, a `SESSION_COOKIE_PASSWORD` and secure cookies. It also refuses `LOCAL_SIGN_IN=true`.
 
 ### Personal data
 
